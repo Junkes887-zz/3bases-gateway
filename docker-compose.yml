@@ -1,0 +1,112 @@
+version: '3'
+
+services:
+  nginx:
+    image: nginx:1.17.6-alpine
+    container_name: nginx
+    volumes:
+    - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports: 
+      - "8000:80"
+    networks:
+      - base-a-network
+      - base-b-network
+      - base-c-network
+    depends_on:
+      - server-a
+      - server-b
+      - server-c
+
+  mongo-a:
+    image: mongo:latest
+    container_name: mongo-a
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    networks:
+      - base-a-network
+
+  mongo-b:
+    image: mongo:latest
+    container_name: mongo-b
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: rootpassword
+    networks:
+      - base-b-network
+
+  redis:
+    image: "redis:alpine"
+    container_name: redis
+    command: redis-server --save ''
+    networks:
+      - base-b-network
+    
+  elastic:  
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
+    container_name: elastic
+    environment:
+      - node.name=elastic
+      - discovery.type=single-node
+      - cluster.name=es-docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - base-c-network
+
+  server-a:
+    container_name: server-a
+    image: 3base-server-a
+    restart: on-failure
+    environment:
+      DATABASE_URL: "mongodb://root:rootpassword@mongo-a:27017"
+      CRYPT_KEY: cryptkey3basesSv
+      PORT: 3000
+      DATABASE: local
+      COLLECTION: usuarios
+    depends_on:
+      - mongo-a
+    networks:
+      - base-a-network
+
+  server-b:
+    container_name: server-b
+    image: 3base-server-b
+    restart: on-failure
+    environment:
+      REDIS_URL: "redis:6379"
+      MONGO_URL: "mongodb://root:rootpassword@mongo-b:27017"
+      CRYPT_KEY: cryptkey3basesSv
+      PORT: 3000
+      DATABASE: local
+      COLLECTION: usuarios
+    depends_on:
+      - mongo-b
+      - redis
+    networks:
+      - base-b-network
+
+  server-c:
+    container_name: server-c
+    image: 3base-server-c
+    restart: on-failure
+    environment:
+      DATABASE_URL: "http://elastic:9200"
+      PORT: 3000
+    depends_on:
+      - elastic
+    networks:
+      - base-c-network
+    
+networks: 
+  base-a-network:
+    driver: bridge
+  base-b-network:
+    driver: bridge
+  base-c-network:
+    driver: bridge
+  
